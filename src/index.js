@@ -2,73 +2,8 @@
     'use strict';
 
     const xmldoc = require('xmldoc');
-    const request = require('request');
     const deepmerge = require('deepmerge');
-
     const fs = require('fs');
-    const path = require('path');
-
-    const cachePath = path.resolve(__dirname, '..', 'cache');
-
-    function getProtocol (opts = {}) {
-        if (!opts.secure) {
-            return 'http://';
-        }
-
-        return 'https://';
-    }
-
-    function doGetRequest (params = {}, opts = {}) {
-        if (params.host === void 0 ||
-            params.path === void 0) {
-            throw new Error('insufficient arguments for get');
-        }
-
-        if (params.rejectUnauthorized === void 0) {
-            params.rejectUnauthorized = true;
-        }
-
-        return new Promise((resolve, reject) => {
-            const requestParams = {
-                url               : getProtocol(opts) + params.host + params.path,
-                headers           : params.headers || {},
-                rejectUnauthorized: params.rejectUnauthorized
-            };
-
-            request(requestParams, (error, response, body) => {
-                if (error) reject(error);
-                else {
-                    resolve({
-                        'body'    : body,
-                        'response': response,
-                        'header'  : response.headers
-                    });
-                }
-            });
-        });
-    }
-
-    function ensureExists (path, mask = '0777') {
-        return new Promise((resolve, reject) => {
-            fs.mkdir(path, mask, function (err) {
-                if (err) {
-                    if (err.code === 'EEXIST') resolve();
-                    else reject(err);
-                } else resolve();
-            });
-        });
-    }
-
-    /**
-     * generate cache name
-     */
-    function getCacheFileName (params) {
-        var cacheFileName = params.host + params.wsdl;
-        cacheFileName = cacheFileName.replace(/[^a-zA-Z 0-9]+/g, '');
-        cacheFileName = encodeURIComponent(cacheFileName);
-
-        return cacheFileName;
-    }
 
     function getNameWithoutNamespace (name) {
         var attr = name.split(':');
@@ -118,7 +53,7 @@
 
         var complexTypeName = $complexType.children[0].name;
         if (!complexTypeName) {
-            let foundTypeItem = $complexType.children.find((typeItem) => typeItem.name);
+            const foundTypeItem = $complexType.children.find((typeItem) => typeItem.name);
             if (foundTypeItem) {
                 complexTypeName = foundTypeItem.name;
             }
@@ -140,7 +75,7 @@
         var $types = getWsdlChild($wsdl, 'types', wsdlStruct);
         var typeName = $types.children[0].name;
         if (!typeName) {
-            let foundTypeItem = $types.children.find((typeItem) => typeItem.name);
+            const foundTypeItem = $types.children.find((typeItem) => typeItem.name);
             if (foundTypeItem) {
                 typeName = foundTypeItem.name;
             }
@@ -203,106 +138,13 @@
         });
     }
 
-    function checkCachedFile (fullPath) {
+    function getWsdl (params = {}) {
         return new Promise((resolve, reject) => {
-            fs.stat(fullPath, (err, fileStats) => {
-                if (err) {
-                    // no file
-                    if (err.code === 'ENOENT') {
-                        resolve(true);
-                    } else {
-                        throw new Error(err);
-                    }
-                } else {
-                    var fileTime = new Date(fileStats.mtime).getTime();
-                    if (Date.now() - fileTime >= 84000000) {
-                        return resolve(true);
-                    }
-
-                    resolve();
-                }
+            fs.readFile(params.path, 'utf8', function (err, contents) {
+                if (err) reject(err);
+                else resolve(contents);
             });
         });
-    }
-
-    function getCachedWsdl (params, opts) {
-        const cacheFileName = getCacheFileName(params);
-        const fullPath = path.resolve(__dirname, '..', 'cache', cacheFileName);
-
-        return checkCachedFile(fullPath)
-            .then((renew) => {
-                if (renew) {
-                    return null;
-                }
-
-                return new Promise((resolve, reject) => {
-                    fs.readFile(fullPath, 'UTF-8',
-                        (err, fileData) => {
-                            if (err) reject(err);
-                            else resolve(fileData);
-                        }
-                    );
-                });
-            })
-            .catch((err) => {
-                throw new Error(err);
-            });
-    }
-
-    function saveWsdlToCache (params, wsdlContent) {
-        var cacheFileName = getCacheFileName(params);
-        var fullPath = cachePath + path.sep + cacheFileName;
-
-        // write to cache
-        return ensureExists(cachePath)
-            .then(() => {
-                return new Promise((resolve, reject) => {
-                    fs.writeFile(fullPath, wsdlContent, (err) => {
-                        if (err) reject(err);
-                        resolve();
-                    });
-                });
-            })
-            .catch((err) => {
-                throw new Error(err);
-            });
-    }
-
-    function getWsdl (params = {}, opts = {}) {
-        return getCachedWsdl(params, opts)
-            .then((wsdl) => {
-                // return cached wsdl if available
-                if (wsdl !== null) {
-                    return wsdl;
-                }
-
-                // create a params copy
-                var paramsCopy = Object.assign({}, params, {
-                    path: params.wsdl
-                });
-
-                // refresh wsdl, save to cache
-                return doGetRequest(paramsCopy, opts)
-                    .then((res) => {
-                        if (res.response.statusCode !== 200) {
-                            throw new Error(`fail to get wsdl: ${res.response.statusMessage}`);
-                        }
-
-                        var contentType = res.response.headers['content-type'];
-                        if (contentType.indexOf('xml') === -1 &&
-                            contentType.indexOf('wsdl') === -1) {
-                            if (opts.failOnWrongContentType === void 0 ||
-                                opts.failOnWrongContentType === true) {
-                                throw new Error('no wsdl/xml response');
-                            } else {
-                                console.error('no wsdl/xml as content-type');
-                            }
-                        }
-
-                        saveWsdlToCache(params, res.body);
-                        return res.body;
-                    });
-            });
     }
 
     function getValFromXmlElement ($xmlElement) {
@@ -321,7 +163,7 @@
                         const addable = getValFromXmlElement($childItem);
                         if (addable) {
                             if (Object(store[elementName]) === store[elementName]) {
-                                for (let addKey of Object.keys(addable)) {
+                                for (const addKey of Object.keys(addable)) {
                                     if (store[elementName][addKey]) {
                                         if (!Array.isArray(store[elementName][addKey])) {
                                             store[elementName][addKey] = [store[elementName][addKey]];
@@ -402,10 +244,10 @@
     };
 
     Wsdlrdr.getNamespaces = function (params, opts) {
-        return getWsdl(params, opts)
+        return getWsdl(params)
             .then(function (wsdl) {
-                let $wsdlObj = new xmldoc.XmlDocument(wsdl);
-                let wsdlObjAttrNames = Object.keys($wsdlObj.attr);
+                const $wsdlObj = new xmldoc.XmlDocument(wsdl);
+                const wsdlObjAttrNames = Object.keys($wsdlObj.attr);
                 return wsdlObjAttrNames.reduce((store, attrKey) => {
                     var attrNamespace = getNamespace(attrKey);
                     var attrName = getNameWithoutNamespace(attrKey);
@@ -414,8 +256,8 @@
                     if ($wsdlObj.attr[attrNamespace]) {
                         if (!store.find((storeItem) => storeItem.short === attrNamespace)) {
                             store.push({
-                                'short': attrNamespace,
-                                'full' : $wsdlObj.attr[attrNamespace]
+                                short: attrNamespace,
+                                full : $wsdlObj.attr[attrNamespace]
                             });
                         }
                     }
@@ -423,8 +265,8 @@
                     // add namespace to list
                     if (attrNamespace.length !== 0) {
                         store.push({
-                            'short': attrName,
-                            'full' : $wsdlObj.attr[attrKey]
+                            short: attrName,
+                            full : $wsdlObj.attr[attrKey]
                         });
                     }
 
@@ -438,12 +280,11 @@
             $message.attr.name === getNameWithoutNamespace(nodeName)
         );
 
-        return getWsdl(params, opts)
+        return getWsdl(params)
             .then(function (wsdl) {
                 var $wsdlObj = new xmldoc.XmlDocument(wsdl);
                 var wsdlStruct = getNamespace($wsdlObj.name, true);
 
-                var $binding = $wsdlObj.childNamed(wsdlStruct + 'binding');
                 var $portType = $wsdlObj.childNamed(wsdlStruct + 'portType');
                 var $messages = $wsdlObj.childrenNamed(wsdlStruct + 'message');
 
@@ -451,16 +292,11 @@
 
                 var typeName = $types.children[0].name;
                 if (!typeName) {
-                    let foundTypeItem = $types.children.find((typeItem) => typeItem.name);
+                    const foundTypeItem = $types.children.find((typeItem) => typeItem.name);
                     if (foundTypeItem) {
                         typeName = foundTypeItem.name;
                     }
                 }
-
-                var typesStruct = getNamespace(typeName, true);
-
-                var $schema = $types.childNamed(typesStruct + 'schema');
-                var $complexTypes = $schema.childrenNamed(typesStruct + 'complexType');
 
                 // try to get method node
                 var $methodPortType = $portType.childWithAttribute('name', methodName);
@@ -482,7 +318,7 @@
     };
 
     Wsdlrdr.getAllFunctions = function (params, opts) {
-        return getWsdl(params, opts)
+        return getWsdl(params)
             .then(function (wsdl) {
                 var $wsdlObj = new xmldoc.XmlDocument(wsdl);
                 var wsdlStruct = getNamespace($wsdlObj.name, true);

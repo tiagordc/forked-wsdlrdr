@@ -140,10 +140,16 @@
 
     function getWsdl (params = {}) {
         return new Promise((resolve, reject) => {
-            fs.readFile(params.path, 'utf8', function (err, contents) {
-                if (err) reject(err);
-                else resolve(contents);
-            });
+
+            if (typeof params.contents === 'string') {
+                resolve(params.contents);
+            } else {
+                fs.readFile(params.path, 'utf8', function (err, contents) {
+                    if (err) reject(err);
+                    else resolve(contents);
+                });
+            }
+
         });
     }
 
@@ -282,6 +288,7 @@
 
         return getWsdl(params)
             .then(function (wsdl) {
+                
                 var $wsdlObj = new xmldoc.XmlDocument(wsdl);
                 var wsdlStruct = getNamespace($wsdlObj.name, true);
 

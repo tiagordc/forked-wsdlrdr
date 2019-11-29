@@ -1,3 +1,3 @@
 # wsdlrdr
-a simple wsdl parser, with promises
 
+WSDL Parser

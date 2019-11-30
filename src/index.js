@@ -77,6 +77,13 @@
                     }
                 }
 
+                if (typeof element.minOccurs === 'string' && element.minOccurs !== 'unbounded') {
+                    element.minOccurs = parseInt(element.minOccurs);
+                }
+                if (typeof element.maxOccurs === 'string' && element.maxOccurs !== 'unbounded') {
+                    element.maxOccurs = parseInt(element.maxOccurs);
+                }
+
                 return element;
 
             });
@@ -202,7 +209,12 @@
 
             var complexType = getType(root, typeName);
 
-            return Object.assign({}, returnData, complexType);
+            if (complexType && complexType.type) {
+                returnData.type = complexType.type;
+                returnData.typeDef = complexType;
+            }
+
+            return returnData;
             
         });
 
@@ -220,6 +232,59 @@
         }
 
         return $child;
+    }
+
+    function printRecursive (spec, object, level) {
+
+        var result = "";
+
+        if (spec.typeDef && Object.keys(spec.typeDef).length > 0) {
+
+            var def = spec.typeDef;
+
+            result = '\t'.repeat(2 + level) + "<" + (def.name || spec.name); // + ">\n";
+            var innerContents = "";
+
+            for (var key in object) {
+                
+                var val = object[key];
+
+                var element = def.elements.filter(x => x.name === key);
+                if (element.length === 1) {
+                    var el = element[0];
+                    if (el.maxOccurs === "unbounded" || val instanceof Array) {
+                        for (var i = 0; i < val.length; i++) {
+                            innerContents += printRecursive(el, val[i], level + 1);
+                        }
+                    }
+                    else {
+                        innerContents += printRecursive(el, val, level + 1);
+                    }
+                }
+
+                var attributes = def.attributes.filter(x => x.name === key);
+                if (attributes.length === 1) {
+                    result += " " + attributes[0].name + "='" + val.toString() + "'";
+                }
+
+            }
+
+            if (innerContents.length > 0) {
+                result += ">\n" + innerContents;
+                result += '\t'.repeat(2 + level) + "</" + (def.name || spec.name) + ">\n";
+            }
+            else {
+                result += " />\n";
+            }
+
+        }
+        else {
+            if (object == null) result = '\t'.repeat(2 + level) + "<" + spec.name + " />\n";
+            else result = '\t'.repeat(2 + level) + "<" + spec.name + ">" + object.toString() + "</" + spec.name + ">\n";
+        }
+
+        return result;
+
     }
 
     var wsdlParser = module.exports;
@@ -277,16 +342,12 @@
     };
 
     wsdlParser.toXML = function(method, object) {
-
         if (typeof method !== 'object') throw new Error('Method is either the request or response object');
-
-        var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body>\n\t\t";
-
-        result += "<" + method.name + ">\n";
-
-        result += "\t\t</" + method.name + ">\n\t</soapenv:Body>\n</soapenv:Envelope>";
+        //TODO: validate recursive
+        var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body>\n";
+        result += printRecursive(method, object, 0);
+        result += "\t</soapenv:Body>\n</soapenv:Envelope>";
         return result;
-
-    }
+    };
 
 })();

@@ -1,3 +1,3 @@
-# wsdlrdr
+# WSDLtoREST
 
-WSDL Parser
+WSDL Parser and conversion from JS objects

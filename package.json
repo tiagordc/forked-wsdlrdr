@@ -1,24 +1,15 @@
 {
-  "name": "wsdlrdr",
-  "version": "0.5.5",
-  "description": "a simple wsdl parser, with promises",
+  "name": "wsdl-to-rest",
+  "version": "0.0.1",
+  "description": "WSDL Parser and conversion from JS objects",
   "main": "./src/index.js",
   "dependencies": {
-    "request": "^2.88.0",
-    "xmldoc": "^1.1.2",
-    "deepmerge": "^3.2.0"
-  },
-  "devDependencies": {
-    "tape": "latest"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git@github.com:moszeed/wsdlrdr.git"
+    "xmldoc": "^1.1.2"
   },
   "keywords": [
     "wsdl",
     "xml"
   ],
-  "author": "Michael Roeber",
+  "author": "Tiago Costa",
   "license": "MIT"
 }

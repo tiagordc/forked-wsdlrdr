@@ -1,8 +1,8 @@
-# WSDLtoREST
+# wsdl-to-rest
 
 WSDL Parser and conversion from JS objects
 
-## how to use
+## How to use
 
 ```javascript
 const parser = require('wsdl-to-rest');
@@ -28,8 +28,14 @@ fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
           ]
         }
     };
+    
     var xml = parser.toXML(method.request, requestBody);
     console.log(xml);
     
 });
 ```
+
+## Tests
+
+Unit testing in private repositories
+

@@ -1,6 +1,11 @@
 # wsdl-to-rest
 
-WSDL Parser and conversion from JS objects
+WSDL Parser
+
+Use this library to:
+- Parse WSDL functions and types
+- Convert a JSON object (from a REST api or any other source) to a SOAP message
+- Convert a SOAP response XML to the same JSON format
 
 ## How to use
 

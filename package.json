@@ -1,8 +1,8 @@
 {
   "name": "wsdl-to-rest",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": false,
-  "description": "WSDL Parser and conversion from JS objects",
+  "description": "WSDL Parser",
   "main": "./src/index.js",
   "dependencies": {
     "xml2js": "^0.4.22",

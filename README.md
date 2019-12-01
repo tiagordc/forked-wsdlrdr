@@ -4,6 +4,8 @@ WSDL Parser and conversion from JS objects
 
 ## How to use
 
+npm install wsdl-to-rest
+
 ```javascript
 const parser = require('wsdl-to-rest');
 var fs = require('fs');
@@ -24,7 +26,7 @@ fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
           collectionAttribute: 'x',
           Item: [
             { attribute: 1, Child: 2 },
-            { attribute: 3, Child: 4}
+            { attribute: 3, Child: 4 }
           ]
         }
     };

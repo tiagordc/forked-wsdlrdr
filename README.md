@@ -8,7 +8,7 @@ npm install wsdl-to-rest
 
 ```javascript
 const parser = require('wsdl-to-rest');
-var fs = require('fs');
+const fs = require('fs');
 
 fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
 
@@ -16,6 +16,8 @@ fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
     console.log(methods);
 
     var method = parser.getFunction(wsdl, "GetStatus");
+    console.log(method);
+
     var requestBody = {
         SimpleNode: 0,
         ComplexNode: {
@@ -30,8 +32,7 @@ fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
           ]
         }
     };
-    
-    var xml = parser.toXML(wsdl, method.request, requestBody, true);
+    var xml = parser.requestBody(wsdl, "GetStatus", requestBody, true);
     console.log(xml);
     
 });

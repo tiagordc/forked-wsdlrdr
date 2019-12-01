@@ -4,6 +4,7 @@
   "description": "WSDL Parser and conversion from JS objects",
   "main": "./src/index.js",
   "dependencies": {
+    "xml2js": "^0.4.22",
     "xmldoc": "^1.1.2"
   },
   "keywords": [

@@ -225,15 +225,83 @@
 
     }
 
-    function getWsdlChild ($wsdlObj, name, wsdlStruct) {
-        var $child = $wsdlObj.childNamed(wsdlStruct + name);
+    function getWsdlChild (wsdl, name, wsdlStruct) {
+
+        var child = wsdl.childNamed(wsdlStruct + name);
 
         // if not found try some default
-        if (!$child) {
-            $child = $wsdlObj.childNamed('wsdl:' + name);
+        if (!child) {
+            child = wsdl.childNamed('wsdl:' + name);
         }
 
-        return $child;
+        return child;
+
+    }
+
+    function parseRecursive (spec, object) {
+
+        var result = {};
+
+        if (spec.typeDef && Object.keys(spec.typeDef).length > 0) {
+
+            const def = spec.typeDef;
+            let currentObj = {};
+
+            for (var key in object) {
+
+                if (key === '$') continue;
+                if (key === '_') continue;
+
+                var element = def.elements.filter(x => x.name === key);
+
+                if (element.length === 1) {
+
+                    var el = element[0];
+                    let val = object[key];
+
+                    if (el.maxOccurs === "unbounded" || val instanceof Array) {
+
+                        let valArray = [];
+
+                        for (var i = 0; i < val.length; i++) {
+                            const arrayItem = parseRecursive(el, val[i]); 
+                            valArray.push(arrayItem);
+                        }
+
+                        currentObj[key] = valArray;
+
+                    }
+                    else {
+                        currentObj[key] = parseRecursive(el, val);
+                    }
+
+                }
+
+            }
+
+            if (object['$']) {
+
+                for (var key in object['$']) {
+
+                    var attributes = def.attributes.filter(x => x.name === key);
+                    if (attributes.length === 1) {
+                        currentObj[key] = object['$'][key];
+                    }
+
+                }
+
+            }
+
+            if (def.name) result[def.name] = currentObj;
+            else Object.assign(result, currentObj);
+
+        }
+        else {
+            return object;
+        }
+
+        return result;
+
     }
 
     function printRecursive (spec, object, level, namespaces) {
@@ -321,10 +389,19 @@
 
     wsdlParser.getFunctions = function (wsdl) {
 
-        var wsdlObj = new xmldoc.XmlDocument(wsdl);
-        var wsdlStruct = getNamespace(wsdlObj.name, true);
+        if (typeof wsdl === 'string') {
+            wsdl = new xmldoc.XmlDocument(wsdl);
+        }
+        else if (wsdl instanceof xmldoc.XmlDocument) {
 
-        var binding = wsdlObj.childNamed(wsdlStruct + 'binding');
+        }
+        else {
+
+        }
+
+        var wsdlStruct = getNamespace(wsdl.name, true);
+
+        var binding = wsdl.childNamed(wsdlStruct + 'binding');
         var operations = binding.childrenNamed(wsdlStruct + 'operation');
 
         return operations.map(x => x.attr.name).sort();
@@ -335,10 +412,18 @@
 
         var getMessageNode = ($messages, nodeName) => $messages.find(($message) => $message.attr.name === getNameWithoutNamespace(nodeName) );
         
-        var wsdlXML = new xmldoc.XmlDocument(wsdl);
+        if (typeof wsdl === 'string') {
+            wsdl = new xmldoc.XmlDocument(wsdl);
+        }
+        else if (wsdl instanceof xmldoc.XmlDocument) {
 
-        var wsdlNamespace = getNamespace(wsdlXML.name, true);
-        var wsdlTypes = getWsdlChild(wsdlXML, 'types', wsdlNamespace);
+        }
+        else {
+
+        }
+
+        var wsdlNamespace = getNamespace(wsdl.name, true);
+        var wsdlTypes = getWsdlChild(wsdl, 'types', wsdlNamespace);
         
         var typeName;
         const childWithName = wsdlTypes.children.find((typeItem) => typeItem.name);
@@ -347,10 +432,10 @@
 
         var schema = wsdlTypes.childNamed(typeNamespace + 'schema');
 
-        var wsdlObj = { wsdl: wsdlXML, schema, typeNamespace };
+        var wsdlObj = { wsdl: wsdl, schema, typeNamespace };
 
-        var portType = wsdlXML.childNamed(wsdlNamespace + 'portType');
-        var messages = wsdlXML.childrenNamed(wsdlNamespace + 'message');
+        var portType = wsdl.childNamed(wsdlNamespace + 'portType');
+        var messages = wsdl.childrenNamed(wsdlNamespace + 'message');
 
         // try to get method node
         var methodPortType = portType.childWithAttribute('name', methodName);
@@ -371,18 +456,42 @@
       
     };
 
-    wsdlParser.toXML = function(wsdl, method, object, namespaces) {
+    wsdlParser.readResponse = function(wsdlString, methodName, xmlString) {
+
+        let result;
+
+        const method = this.getFunction(wsdlString, methodName).response;
+
+        const xml2js = require('xml2js');
+        xml2js.parseString(xmlString, { async: false, attrkey: '$', charkey: '_', explicitArray: false, normalizeTags: false, normalize: false, tagNameProcessors: [xml2js.processors.stripPrefix], attrNameProcessors: [xml2js.processors.stripPrefix] }, function (parseErr, parseResult) {
+            if (!parseErr) { 
+                
+                const root = parseResult.Envelope.Body;
+                const keys = Object.keys(root);
+
+                if (keys.length === 1) {
+                    result = parseRecursive(method, root[keys[0]]);
+                }
+                
+            }
+        });
         
-        if (typeof method !== 'object') throw new Error('Method is either the request or response object');
+        return result;
         
-        var ns = namespaces === false ? null : [];
+    };
+
+    wsdlParser.requestBody = function(wsdlString, methodName, object, namespaces) {
+        
+        let wsdl = new xmldoc.XmlDocument(wsdlString);
+        let method = this.getFunction(wsdl, methodName).request;
+        let ns = namespaces === false ? null : [];
 
         var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body";;
 
         var contents = printRecursive(method, object, 0, ns);
 
         if (ns && ns.length > 0) {
-            var wsdlXML = new xmldoc.XmlDocument(wsdl);
+            var wsdlXML = new xmldoc.XmlDocument(wsdlString);
             ns.forEach(x => {
                 result += " xmlns:" + x + "='" + wsdlXML.attr["xmlns:" + x] + "'";
             });

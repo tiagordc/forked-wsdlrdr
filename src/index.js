@@ -27,23 +27,26 @@
 
     function getFormatedAttr (attr) {
 
+        var result = {};
+        Object.assign(result, attr);
+
         var namespace = '';
 
-        if (attr.type) {
-            attr.type = getNameWithoutNamespace(attr.type);
-            namespace = getNamespace(attr.type);
+        if (result.type) {
+            namespace = getNamespace(result.type);
+            result.type = getNameWithoutNamespace(result.type);
         }
 
-        if (attr.element) {
-            attr.element = getNameWithoutNamespace(attr.element);
-            namespace = getNamespace(attr.element);
+        if (result.element) {
+            namespace = getNamespace(result.element);
+            result.element = getNameWithoutNamespace(result.element);
         }
 
         if (namespace.length !== 0) {
-            attr.namespace = namespace;
+            result.namespace = namespace;
         }
 
-        return attr;
+        return result;
 
     }
 
@@ -164,9 +167,8 @@
             if (methodSchema.children.length === 0) {
                 var formatted = getFormatedAttr(methodSchema.attr);
                 if (formatted.type) {
-                    result.type = formatted.type;
-                    result.name = formatted.name;
-                    complexType = complexTypes.find((x => x.attr.name === formatted.type));
+                    Object.assign(result, formatted);
+                    complexType = complexTypes.find((x => x.attr.name === result.type));
                 }
                 else {
                     return formatted; //simple type
@@ -234,15 +236,34 @@
         return $child;
     }
 
-    function printRecursive (spec, object, level) {
+    function printRecursive (spec, object, level, namespaces) {
 
         var result = "";
 
         if (spec.typeDef && Object.keys(spec.typeDef).length > 0) {
 
-            var def = spec.typeDef;
+            let def = spec.typeDef;
+            let tag = "";
 
-            result = '\t'.repeat(2 + level) + "<" + (def.name || spec.name); // + ">\n";
+            result = '\t'.repeat(2 + level) + "<";
+            
+            if (def.name) {
+                if (namespaces && def.namespace) {
+                    if (namespaces.indexOf(def.namespace) === -1) namespaces.push(def.namespace);
+                    tag = def.namespace + ':';
+                }
+                tag += def.name;
+                result += tag;
+            }
+            else {
+                if (namespaces && spec.namespace) {
+                    if (namespaces.indexOf(spec.namespace) === -1) namespaces.push(spec.namespace);
+                    tag = spec.namespace + ':';
+                }
+                tag += spec.name;
+                result += tag;
+            }
+
             var innerContents = "";
 
             for (var key in object) {
@@ -254,11 +275,11 @@
                     var el = element[0];
                     if (el.maxOccurs === "unbounded" || val instanceof Array) {
                         for (var i = 0; i < val.length; i++) {
-                            innerContents += printRecursive(el, val[i], level + 1);
+                            innerContents += printRecursive(el, val[i], level + 1, namespaces);
                         }
                     }
                     else {
-                        innerContents += printRecursive(el, val, level + 1);
+                        innerContents += printRecursive(el, val, level + 1, namespaces);
                     }
                 }
 
@@ -271,7 +292,7 @@
 
             if (innerContents.length > 0) {
                 result += ">\n" + innerContents;
-                result += '\t'.repeat(2 + level) + "</" + (def.name || spec.name) + ">\n";
+                result += '\t'.repeat(2 + level) + "</" + tag + ">\n";
             }
             else {
                 result += " />\n";
@@ -279,8 +300,17 @@
 
         }
         else {
-            if (object == null) result = '\t'.repeat(2 + level) + "<" + spec.name + " />\n";
-            else result = '\t'.repeat(2 + level) + "<" + spec.name + ">" + object.toString() + "</" + spec.name + ">\n";
+
+            var namespace = '';
+
+            if (namespaces && spec.namespace) {
+                if (namespaces.indexOf(spec.namespace) === -1) namespaces.push(spec.namespace);
+                namespace = spec.namespace + ':';
+            }
+
+            if (object == null) result = '\t'.repeat(2 + level) + "<" + namespace + spec.name + " />\n";
+            else result = '\t'.repeat(2 + level) + "<" + namespace + spec.name + ">" + object.toString() + "</" + namespace + spec.name + ">\n";
+
         }
 
         return result;
@@ -341,13 +371,29 @@
       
     };
 
-    wsdlParser.toXML = function(method, object) {
+    wsdlParser.toXML = function(wsdl, method, object, namespaces) {
+        
         if (typeof method !== 'object') throw new Error('Method is either the request or response object');
-        //TODO: validate recursive
-        var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body>\n";
-        result += printRecursive(method, object, 0);
+        
+        var ns = namespaces === false ? null : [];
+
+        var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body";;
+
+        var contents = printRecursive(method, object, 0, ns);
+
+        if (ns && ns.length > 0) {
+            var wsdlXML = new xmldoc.XmlDocument(wsdl);
+            ns.forEach(x => {
+                result += " xmlns:" + x + "='" + wsdlXML.attr["xmlns:" + x] + "'";
+            });
+        }
+
+        result += ">\n" + contents;
+
         result += "\t</soapenv:Body>\n</soapenv:Envelope>";
+
         return result;
+
     };
 
 })();

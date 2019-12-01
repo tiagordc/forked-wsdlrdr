@@ -29,7 +29,7 @@ fs.readFile('LocalService.wsdl', 'utf8', function (err, wsdl) {
         }
     };
     
-    var xml = parser.toXML(method.request, requestBody);
+    var xml = parser.toXML(wsdl, method.request, requestBody, true);
     console.log(xml);
     
 });

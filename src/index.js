@@ -387,22 +387,43 @@
 
     var wsdlParser = module.exports;
 
-    wsdlParser.getFunctions = function (wsdl) {
+    wsdlParser.read = function (wsdl) {
+
+        let wsdlObj;
 
         if (typeof wsdl === 'string') {
             wsdl = new xmldoc.XmlDocument(wsdl);
         }
-        else if (wsdl instanceof xmldoc.XmlDocument) {
+
+        if (wsdl instanceof xmldoc.XmlDocument) {
+
+            var wsdlNamespace = getNamespace(wsdl.name, true);
+            var wsdlTypes = getWsdlChild(wsdl, 'types', wsdlNamespace);
+            
+            var typeName;
+            const childWithName = wsdlTypes.children.find((typeItem) => typeItem.name);
+            if (childWithName) typeName = childWithName.name; //most likely the schema object
+            var typeNamespace = getNamespace(typeName, true);
+    
+            var schema = wsdlTypes.childNamed(typeNamespace + 'schema');
+    
+            wsdlObj = { wsdl: wsdl, namespace: wsdlNamespace, schema, typeNamespace };
 
         }
-        else {
-
+        else if (typeof wsdl === 'object' && wsdl.wsdl && wsdl.namespace) {
+            wsdlObj = wsdl;
         }
 
-        var wsdlStruct = getNamespace(wsdl.name, true);
+        return wsdlObj;
 
-        var binding = wsdl.childNamed(wsdlStruct + 'binding');
-        var operations = binding.childrenNamed(wsdlStruct + 'operation');
+    };
+
+    wsdlParser.getFunctions = function (wsdl) {
+
+        var wsdlObj = this.read(wsdl);
+
+        var binding = wsdlObj.wsdl.childNamed(wsdlObj.namespace + 'binding');
+        var operations = binding.childrenNamed(wsdlObj.namespace + 'operation');
 
         return operations.map(x => x.attr.name).sort();
 
@@ -412,39 +433,17 @@
 
         var getMessageNode = ($messages, nodeName) => $messages.find(($message) => $message.attr.name === getNameWithoutNamespace(nodeName) );
         
-        if (typeof wsdl === 'string') {
-            wsdl = new xmldoc.XmlDocument(wsdl);
-        }
-        else if (wsdl instanceof xmldoc.XmlDocument) {
+        var wsdlObj = this.read(wsdl);
 
-        }
-        else {
-
-        }
-
-        var wsdlNamespace = getNamespace(wsdl.name, true);
-        var wsdlTypes = getWsdlChild(wsdl, 'types', wsdlNamespace);
-        
-        var typeName;
-        const childWithName = wsdlTypes.children.find((typeItem) => typeItem.name);
-        if (childWithName) typeName = childWithName.name; //most likely the schema object
-        var typeNamespace = getNamespace(typeName, true);
-
-        var schema = wsdlTypes.childNamed(typeNamespace + 'schema');
-
-        var wsdlObj = { wsdl: wsdl, schema, typeNamespace };
-
-        var portType = wsdl.childNamed(wsdlNamespace + 'portType');
-        var messages = wsdl.childrenNamed(wsdlNamespace + 'message');
+        var portType = wsdlObj.wsdl.childNamed(wsdlObj.namespace + 'portType');
+        var messages = wsdlObj.wsdl.childrenNamed(wsdlObj.namespace + 'message');
 
         // try to get method node
         var methodPortType = portType.childWithAttribute('name', methodName);
-        if (!methodPortType) {
-            throw new Error('method ("' + methodName + '") not exists in wsdl');
-        }
-
-        var input = methodPortType.childNamed(wsdlNamespace + 'input');
-        var output = methodPortType.childNamed(wsdlNamespace + 'output');
+        if (!methodPortType) throw new Error('method not exists in wsdl');
+        
+        var input = methodPortType.childNamed(wsdlObj.namespace + 'input');
+        var output = methodPortType.childNamed(wsdlObj.namespace + 'output');
 
         var inputMsg = getMessageNode(messages, getNameWithoutNamespace(input.attr.message));
         var outputMsg = getMessageNode(messages, getNameWithoutNamespace(output.attr.message));
@@ -456,11 +455,11 @@
       
     };
 
-    wsdlParser.readResponse = function(wsdlString, methodName, xmlString) {
+    wsdlParser.readResponse = function(wsdl, methodName, xmlString) {
 
         let result;
 
-        const method = this.getFunction(wsdlString, methodName).response;
+        const method = this.getFunction(wsdl, methodName).response;
 
         const xml2js = require('xml2js');
         xml2js.parseString(xmlString, { async: false, attrkey: '$', charkey: '_', explicitArray: false, normalizeTags: false, normalize: false, tagNameProcessors: [xml2js.processors.stripPrefix], attrNameProcessors: [xml2js.processors.stripPrefix] }, function (parseErr, parseResult) {
@@ -480,10 +479,10 @@
         
     };
 
-    wsdlParser.requestBody = function(wsdlString, methodName, object, namespaces) {
+    wsdlParser.requestBody = function(wsdl, methodName, object, namespaces) {
         
-        let wsdl = new xmldoc.XmlDocument(wsdlString);
-        let method = this.getFunction(wsdl, methodName).request;
+        let wsdlObj = this.read(wsdl);
+        let method = this.getFunction(wsdlObj, methodName).request;
         let ns = namespaces === false ? null : [];
 
         var result = "<?xml version='1.0' encoding='utf-8'?>\n<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'>\n\t<soapenv:Body";;
@@ -491,9 +490,8 @@
         var contents = printRecursive(method, object, 0, ns);
 
         if (ns && ns.length > 0) {
-            var wsdlXML = new xmldoc.XmlDocument(wsdlString);
             ns.forEach(x => {
-                result += " xmlns:" + x + "='" + wsdlXML.attr["xmlns:" + x] + "'";
+                result += " xmlns:" + x + "='" + wsdlObj.wsdl.attr["xmlns:" + x] + "'";
             });
         }
 
